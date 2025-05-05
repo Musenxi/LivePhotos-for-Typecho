@@ -4,7 +4,7 @@
  * 
  * @package LivePhoto
  * @author 橘夜庭
- * @version 1.0.0
+ * @version 2.0.0
  * @link https://musenxi.com
  */
 class LivePhoto_Plugin implements Typecho_Plugin_Interface {
@@ -26,6 +26,8 @@ class LivePhoto_Plugin implements Typecho_Plugin_Interface {
 
     public static function footer() {
         echo "<script type=\"text/javascript\" src=\"https://cdn.apple-livephotoskit.com/lpk/1/livephotoskit.js\"></script>\n";
+        $pluginUrl = Helper::options()->pluginUrl;
+        echo "<script type=\"text/javascript\" src=\"{$pluginUrl}/LivePhoto/motionphoto.js\"></script>\n";
         echo "<script>console.log('\\n %c LivePhotos v1.0.0 %c https://musenxi.com \\n', 'color: white; background: #ec9bad; padding:5px 0;', 'color: #ec9bad; background: #5698c3; padding:5px 0;');</script>\n";
         echo <<<HTML
         <script>
@@ -39,6 +41,11 @@ class LivePhoto_Plugin implements Typecho_Plugin_Interface {
                     });
                 }
             }
+        
+        // 页面加载完成后初始化 Live Photos
+        window.addEventListener('DOMContentLoaded', function() {
+            initializeLivePhotos();
+        });
         </script>\n
         HTML;
     }
@@ -56,22 +63,36 @@ class LivePhoto_Plugin implements Typecho_Plugin_Interface {
     public static function parseCallback($matches) {
         $attrs = self::shortcode_parse_atts($matches[3]);
         
-        if (!isset($attrs['photo']) || !isset($attrs['video'])) {
-            return $matches[0];
+        // 检查是否为Motion图（只有photo属性，没有video属性）
+        if (isset($attrs['photo']) && !isset($attrs['video'])) {
+            $ratio = isset($attrs['ratio']) ? $attrs['ratio'] : '4/3';
+            
+            // 为Motion图生成不同的HTML结构
+            return sprintf(
+                '<div style="width: auto; aspect-ratio: %s; margin: auto;" id="files">
+                    <div><img src="%s" alt="Motion Photo" style="width: 100%%; height: auto;"></div>
+                </div>',
+                $ratio,
+                $attrs['photo']
+            );
         }
+        // 处理标准Live Photo
+        else if (isset($attrs['photo']) && isset($attrs['video'])) {
+            $ratio = isset($attrs['ratio']) ? $attrs['ratio'] : '4/3';
 
-        $ratio = isset($attrs['ratio']) ? $attrs['ratio'] : '4/3';
-
-        return sprintf(
-            '<div style="width: auto; aspect-ratio: %s; margin: auto;" 
-                  data-live-photo 
-                  data-photo-src="%s" 
-                  data-video-src="%s">
-            </div>',
-            $ratio,
-            $attrs['photo'],
-            $attrs['video']
-        );
+            return sprintf(
+                '<div style="width: auto; aspect-ratio: %s; margin: auto;" 
+                      data-live-photo 
+                      data-photo-src="%s" 
+                      data-video-src="%s">
+                </div>',
+                $ratio,
+                $attrs['photo'],
+                $attrs['video']
+            );
+        }
+        
+        return $matches[0];
     }
 
     public static function addButton() {
@@ -79,7 +100,7 @@ class LivePhoto_Plugin implements Typecho_Plugin_Interface {
         <script>
         window.addEventListener('load', function() {
             $('#wmd-button-row').append(
-                '<li class="wmd-button" id="wmd-livephoto-button" title="插入Live Photo">' +
+                '<li class="wmd-button" id="wmd-livephoto-button" title="插入Live Photo/Motion图">' +
                 '<span class="wmd-livephoto-icon">Live</span></li>'
             );
             
@@ -89,11 +110,11 @@ class LivePhoto_Plugin implements Typecho_Plugin_Interface {
                         '<div class="wmd-prompt-background" style="position: absolute; top: 0px; z-index: 1000; opacity: 0.5; height: 100%; left: 0px; width: 100%;"></div>'+
                         '<div class="wmd-prompt-dialog">'+
                             '<div>'+
-                                '<p><b>插入Live Photo</b></p>'+
+                                '<p><b>插入Live Photo/Motion图</b></p>'+
                                 '<p>请输入图片URL:</p>'+
                                 '<p><input type="text" id="photo-url"></input></p>'+
-                                '<p>请输入视频URL:</p>'+ 
-                                '<p><input type="text" id="video-url"></input></p>'+
+                                '<p>请输入视频URL (仅Live Photo需要):</p>'+ 
+                                '<p><input type="text" id="video-url" placeholder="留空则视为Motion图"></input></p>'+
                                 '<p>请输入宽高比(格式如 4/3):</p>'+
                                 '<p><input type="text" id="aspect-ratio" placeholder="留空默认为4/3"></input></p>'+
                             '</div>'+
@@ -116,11 +137,19 @@ class LivePhoto_Plugin implements Typecho_Plugin_Interface {
                 var videoUrl = $('#video-url').val();
                 var ratio = $('#aspect-ratio').val();
                 
-                if (photoUrl && videoUrl) {
-                    var text = '[LivePhoto photo="' + photoUrl + '" video="' + videoUrl + '"';
+                if (photoUrl) {
+                    var text = '[LivePhoto photo="' + photoUrl + '"';
+                    
+                    // 如果提供了视频URL，则添加video属性（Live Photo）
+                    if (videoUrl) {
+                        text += ' video="' + videoUrl + '"';
+                    }
+                    
+                    // 添加宽高比
                     if(ratio && ratio !== '4/3') {
                         text += ' ratio="' + ratio + '"';
                     }
+                    
                     text += ']';
                     var textarea = $('#text');
                     var sel = textarea.getSelection();
