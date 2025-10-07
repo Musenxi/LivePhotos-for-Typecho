@@ -28,7 +28,7 @@ class LivePhoto_Plugin implements Typecho_Plugin_Interface {
         echo "<script type=\"text/javascript\" src=\"https://cdn.apple-livephotoskit.com/lpk/1/livephotoskit.js\"></script>\n";
         $pluginUrl = Helper::options()->pluginUrl;
         echo "<script type=\"text/javascript\" src=\"{$pluginUrl}/LivePhoto/motionphoto.js\"></script>\n";
-        echo "<script>console.log('\\n %c LivePhotos v1.0.0 %c https://musenxi.com \\n', 'color: white; background: #ec9bad; padding:5px 0;', 'color: #ec9bad; background: #5698c3; padding:5px 0;');</script>\n";
+        echo "<script>console.log('\\n %c LivePhotos v2.0.0 %c https://musenxi.com \\n', 'color: white; background: #ec9bad; padding:5px 0;', 'color: #ec9bad; background: #5698c3; padding:5px 0;');</script>\n";
         echo <<<HTML
         <script>
         function initializeLivePhotos() {
@@ -194,3 +194,4 @@ class LivePhoto_Plugin implements Typecho_Plugin_Interface {
         return '\[(\[?)('.$tagregexp.')(?![\w-])([^\]\/]*(?:\/(?!\])[^\]\/]*)*?)(?:(\/)\]|\](?:([^\[]*+(?:\[(?!\/\2\])[^\[]*+)*+)\[\/\2\])?)(\]?)';
     }
 }
+
