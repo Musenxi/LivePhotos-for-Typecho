@@ -179,8 +179,9 @@
                 const pulseSize = circleRadius * 0.15;
 
                 // 旋转效果
-                const rotation = (timestamp * Math.PI * 2) % (Math.PI * 2);
-
+                //const rotation = (timestamp * Math.PI * 2) % (Math.PI * 2);
+                const rotation =Math.sin(timestamp * 2) * (Math.PI / 8);
+                
                 badgeCtx.save();
                 badgeCtx.translate(circleX, circleY);
                 badgeCtx.rotate(rotation);
@@ -542,3 +543,4 @@
         };
     }
 })();
+
