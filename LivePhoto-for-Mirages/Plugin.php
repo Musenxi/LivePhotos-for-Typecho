@@ -4,7 +4,7 @@
  * 
  * @package LivePhoto
  * @author 橘夜庭
- * @version 2.0.0
+ * @version 2.1.1
  * @link https://musenxi.com
  */
 class LivePhoto_Plugin implements Typecho_Plugin_Interface {
@@ -27,8 +27,8 @@ class LivePhoto_Plugin implements Typecho_Plugin_Interface {
     public static function footer() {
         echo "<script type=\"text/javascript\" src=\"https://cdn.apple-livephotoskit.com/lpk/1/livephotoskit.js\"></script>\n";
         $pluginUrl = Helper::options()->pluginUrl;
-        echo "<script type=\"text/javascript\" src=\"{$pluginUrl}/LivePhoto/motionphoto.js\"></script>\n";
-        echo "<script>console.log('\\n %c LivePhotos v2.0.0 %c https://musenxi.com \\n', 'color: white; background: #ec9bad; padding:5px 0;', 'color: #ec9bad; background: #5698c3; padding:5px 0;');</script>\n";
+        echo "<script type=\"text/javascript\" src=\"{$pluginUrl}/LivePhoto/motionphoto.js?v=2.1.1\"></script>\n";
+        echo "<script>console.log('\\n %c LivePhotos v2.1.1 %c https://musenxi.com \\n', 'color: white; background: #ec9bad; padding:5px 0;', 'color: #ec9bad; background: #5698c3; padding:5px 0;');</script>\n";
         echo <<<HTML
         <script>
         function initializeLivePhotos() {
