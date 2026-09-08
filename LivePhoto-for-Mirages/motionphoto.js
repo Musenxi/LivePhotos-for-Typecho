@@ -6,6 +6,16 @@
     vid.autoplay=true;
     if ('mediaSession' in navigator) navigator.mediaSession.setActionHandler('nexttrack', vid.onended);
 
+    function resolveMotionPhotoSource(img) {
+        // Many Typecho themes replace img.src with a transparent placeholder and
+        // keep the real URL in a data attribute until the image enters the viewport.
+        return img.dataset.original ||
+            img.dataset.src ||
+            img.getAttribute('data-lazy-src') ||
+            img.currentSrc ||
+            img.src;
+    }
+
     function handleMotionPhoto(img) {
         let container = document.createElement("div");
         container.style.position = "relative";
@@ -20,6 +30,7 @@
         canvas.style.display = "block";
         canvas.style.margin = "auto";
         canvas.style.touchAction = "none";
+        canvas.style.visibility = "hidden";
 
         let liveBadgeCanvas = document.createElement("canvas");
         liveBadgeCanvas.style.position = "absolute";
@@ -36,6 +47,7 @@
         let isPlaying = false;
         let isMuted = true;
         let playPromise = null;
+        let imageReady = false;
 
         const dpr = window.devicePixelRatio || 1;
 
@@ -50,9 +62,10 @@
         volumeBadgeCanvas.style.width = `${volumeVisualSize}px`;
         volumeBadgeCanvas.style.height = `${volumeVisualSize}px`;
 
+        const sourceUrl = resolveMotionPhotoSource(img);
+        const originalDisplay = img.style.display;
         let imgObj = new Image();
         imgObj.crossOrigin = "anonymous";
-        imgObj.src = img.src;
 
         let v = document.createElement("video");
         v.style.position = "absolute";
@@ -71,11 +84,28 @@
         v.controls = false;
 
         imgObj.onload = function() {
-            canvas.width = imgObj.width;
-            canvas.height = imgObj.height;
+            imageReady = true;
+            // Match the backing store to the rendered size instead of allocating a
+            // full-resolution canvas for every photo. A 3024x4032 canvas alone uses
+            // about 46.5 MiB, which can make later canvases turn black on mobile.
+            const naturalWidth = imgObj.naturalWidth || imgObj.width;
+            const naturalHeight = imgObj.naturalHeight || imgObj.height;
+            const renderedWidth = Math.max(1, (container.clientWidth || naturalWidth) * 0.8);
+            const backingWidth = Math.max(1, Math.min(naturalWidth, Math.ceil(renderedWidth * dpr)));
+            const scale = backingWidth / naturalWidth;
+
+            canvas.width = backingWidth;
+            canvas.height = Math.max(1, Math.round(naturalHeight * scale));
 
             let ctx = canvas.getContext('2d', { alpha: false });
             ctx.drawImage(imgObj, 0, 0, canvas.width, canvas.height);
+            canvas.style.visibility = "visible";
+
+            // Keep the original image until the real source has loaded so it can be
+            // restored if loading fails.
+            if (img.parentNode) {
+                img.parentNode.removeChild(img);
+            }
 
             const containerWidth = container.offsetWidth;
             const marginSide = containerWidth * 0.1;
@@ -88,9 +118,9 @@
             drawLiveBadge(false);
             drawVolumeBadge(isMuted);
 
-            imgtoblob(img.src).then(blob => {
-                if (blob) {
-                    v.src = blob;
+            imgtoblob(sourceUrl).then(videoUrl => {
+                if (videoUrl) {
+                    v.src = videoUrl;
 
                     v.addEventListener('loadedmetadata', function() {
                         function updateCanvas() {
@@ -125,8 +155,25 @@
                             ctx.drawImage(imgObj, 0, 0, canvas.width, canvas.height);
                         }
                     });
+                } else {
+                    console.warn('Motion Photo does not contain an embedded MP4:', sourceUrl);
                 }
+            }).catch(error => {
+                console.warn('Unable to load Motion Photo video:', sourceUrl, error);
             });
+        };
+
+        imgObj.onerror = function() {
+            imageReady = false;
+            console.warn('Unable to load Motion Photo image:', sourceUrl);
+            if (container.parentNode) {
+                container.parentNode.removeChild(container);
+            }
+            if (v.parentNode) {
+                v.parentNode.removeChild(v);
+            }
+            img.style.display = originalDisplay;
+            img.src = sourceUrl;
         };
 
         let liveBadgeAnimationId = null;
@@ -309,6 +356,7 @@
         });
 
         function startPlayback() {
+            if (!imageReady || !v.src) return;
             v.currentTime = 0;
 
             if (playPromise !== null) {
@@ -349,8 +397,10 @@
                         liveBadgeAnimationId = null;
                     }
 
-                    let ctx = canvas.getContext('2d');
-                    ctx.drawImage(imgObj, 0, 0, canvas.width, canvas.height);
+                    if (imageReady) {
+                        let ctx = canvas.getContext('2d');
+                        ctx.drawImage(imgObj, 0, 0, canvas.width, canvas.height);
+                    }
                     drawLiveBadge(false);
                 });
             } else {
@@ -363,8 +413,10 @@
                     liveBadgeAnimationId = null;
                 }
 
-                let ctx = canvas.getContext('2d');
-                ctx.drawImage(imgObj, 0, 0, canvas.width, canvas.height);
+                if (imageReady) {
+                    let ctx = canvas.getContext('2d');
+                    ctx.drawImage(imgObj, 0, 0, canvas.width, canvas.height);
+                }
                 drawLiveBadge(false);
             }
         }
@@ -423,7 +475,8 @@
         document.body.appendChild(v);
 
         img.parentNode.insertBefore(container, img);
-        img.parentNode.removeChild(img);
+        img.style.display = "none";
+        imgObj.src = sourceUrl;
 
         document.addEventListener('visibilitychange', function() {
             if (document.hidden && isPlaying) {
@@ -443,17 +496,26 @@
     }
 
     function initializeMotionPhotos() {
-        const motionContainers = document.querySelectorAll('#files');
-        motionContainers.forEach(container => {
-            const images = container.querySelectorAll('img');
-            images.forEach(img => {
-                handleMotionPhoto(img);
+        const images = document.querySelectorAll('#files img');
+
+        if (!('IntersectionObserver' in window)) {
+            images.forEach(handleMotionPhoto);
+            return;
+        }
+
+        const observer = new IntersectionObserver(entries => {
+            entries.forEach(entry => {
+                if (!entry.isIntersecting) return;
+                observer.unobserve(entry.target);
+                handleMotionPhoto(entry.target);
             });
-        });
+        }, { rootMargin: '600px 0px' });
+
+        images.forEach(img => observer.observe(img));
     }
 
     window.addEventListener('DOMContentLoaded', function() {
-        setTimeout(initializeMotionPhotos, 500);
+        initializeMotionPhotos();
     });
 
     (document.querySelector('#files')||document.body).addEventListener('click', function(event){
@@ -487,8 +549,12 @@
 
     async function imgtoblob(img,o) {
         let response = await fetch(img);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
         let data = await response.arrayBuffer();
-        return URL.createObjectURL(buffertoblob(data,o));
+        const blob = buffertoblob(data,o);
+        return blob ? URL.createObjectURL(blob) : null;
     }
 
     function buffertoblob(data,o) {
@@ -500,8 +566,7 @@
             }
         }
         if(start==undefined) {
-            vid.poster=vid.src;
-            return false;
+            return null;
         }
         var blob= o? new Blob([array.subarray(0,start)],{type:"image/jpg"}) : new Blob([array.subarray(start,array.length)],{type:"video/mp4"});
         return blob;
@@ -543,3 +608,4 @@
         };
     }
 })();
+
